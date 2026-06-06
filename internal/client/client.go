@@ -51,7 +51,10 @@ func New(cfg Config) (*Client, error) {
 		return nil, errors.New("url is required")
 	}
 	hasToken := cfg.Token != ""
-	hasBasic := cfg.Username != "" || cfg.Password != ""
+	hasBasic := cfg.Username != "" && cfg.Password != ""
+	if cfg.Token == "" && !hasBasic && (cfg.Username != "" || cfg.Password != "") {
+		return nil, errors.New("both username and password are required for basic auth")
+	}
 	if hasToken == hasBasic {
 		return nil, errors.New("exactly one of token or username/password must be set")
 	}
@@ -106,11 +109,16 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		msg := e.Error
 		if msg == "" {
 			msg = strings.TrimSpace(string(raw))
+			if len(msg) > 300 {
+				msg = msg[:300] + "…"
+			}
 		}
 		return &APIError{Status: resp.StatusCode, Method: method, Path: path, Message: msg}
 	}
 	if out != nil {
-		return json.NewDecoder(resp.Body).Decode(out)
+		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+			return fmt.Errorf("decode response %s %s: %w", method, path, err)
+		}
 	}
 	return nil
 }
