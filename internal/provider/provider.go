@@ -91,7 +91,7 @@ func (p *nexspenceProvider) Configure(ctx context.Context, req provider.Configur
 }
 
 func (p *nexspenceProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewBlobStoreResource, NewRepositoryResource, NewContentSelectorResource}
+	return []func() resource.Resource{NewBlobStoreResource, NewRepositoryResource, NewContentSelectorResource, NewPrivilegeResource}
 }
 
 func (p *nexspenceProvider) DataSources(_ context.Context) []func() datasource.DataSource {
