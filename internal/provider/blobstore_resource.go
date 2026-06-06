@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -67,7 +68,10 @@ func (r *blobStoreResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Optional:    true,
 				Description: "Filesystem path (type = local).",
 			},
-			"quota_bytes": schema.Int64Attribute{Optional: true},
+			"quota_bytes": schema.Int64Attribute{
+				Optional:   true,
+				Validators: []validator.Int64{int64validator.AtLeast(1)},
+			},
 			"s3": schema.SingleNestedAttribute{
 				Optional:    true,
 				Description: "S3 connection settings (type = s3).",
