@@ -7,7 +7,7 @@ test:
 	go test ./... -count=1
 
 testacc:
-	TF_ACC=1 NEXSPENCE_URL=http://localhost:8081 NEXSPENCE_USERNAME=admin NEXSPENCE_PASSWORD=admin123 \
+	TF_ACC=1 NEXSPENCE_URL=http://localhost:8082 NEXSPENCE_USERNAME=admin NEXSPENCE_PASSWORD=admin123 \
 		go test ./internal/provider/ -v -count=1 -timeout 30m
 
 stack-up:

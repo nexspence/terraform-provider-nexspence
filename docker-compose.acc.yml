@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nexspence
+      POSTGRES_PASSWORD: nexspence
+      POSTGRES_DB: nexspence
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexspence"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  nexspence:
+    image: ghcr.io/nexspence/nexspence:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NEXSPENCE_DATABASE_DSN: "postgres://nexspence:nexspence@postgres:5432/nexspence?sslmode=disable"
+      NEXSPENCE_AUTH_JWT_SECRET: "acceptance-test-secret-min-32-chars!!"
+      NEXSPENCE_HTTP_ADDR: ":8081"
+      NEXSPENCE_STORAGE_DEFAULT_TYPE: "local"
+      NEXSPENCE_STORAGE_LOCAL_BASE_PATH: "/data/blobs"
+    ports:
+      - "8082:8081"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8081/"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
