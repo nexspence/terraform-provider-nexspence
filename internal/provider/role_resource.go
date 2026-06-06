@@ -111,9 +111,13 @@ func (r *roleResource) fromAPI(ctx context.Context, m *roleModel, ro *client.Rol
 			names = append(names, n)
 		}
 	}
-	if len(names) == 0 {
+	if len(names) == 0 && m.Privileges.IsNull() {
+		// Attribute was omitted in config (null) — keep it null so Terraform
+		// does not see drift between null and an empty-known set.
 		m.Privileges = types.SetNull(types.StringType)
 	} else {
+		// Either there are names, or the user explicitly wrote `privileges = []`
+		// (non-null empty set). In both cases emit a known set so state matches.
 		set, diags := types.SetValueFrom(ctx, types.StringType, names)
 		if diags.HasError() {
 			return errors.New("build privileges set")
