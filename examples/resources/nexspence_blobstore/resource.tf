@@ -9,7 +9,7 @@ resource "nexspence_blobstore" "local" {
 resource "nexspence_blobstore" "s3" {
   name = "s3-store"
   type = "s3"
-  s3 {
+  s3 = {
     bucket           = "my-nexspence-blobs"
     region           = "us-east-1"
     endpoint         = "https://minio.example.com"
