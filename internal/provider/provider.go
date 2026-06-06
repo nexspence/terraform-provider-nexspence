@@ -95,5 +95,5 @@ func (p *nexspenceProvider) Resources(_ context.Context) []func() resource.Resou
 }
 
 func (p *nexspenceProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return nil
+	return []func() datasource.DataSource{NewRepositoryDataSource, NewRepositoriesDataSource}
 }
