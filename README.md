@@ -65,7 +65,7 @@ All four values can be supplied via environment variables instead of the provide
 
 ## Resources & Data Sources
 
-**Resources (6)**
+**Resources (10)**
 
 | Resource | Description |
 |---|---|
@@ -75,6 +75,10 @@ All four values can be supplied via environment variables instead of the provide
 | `nexspence_privilege` | Repository content-selector privilege |
 | `nexspence_role` | Role (collection of privileges) |
 | `nexspence_user` | Local user with role assignments |
+| `nexspence_cleanup_policy` | Scheduled cleanup policy (age / last-downloaded / retain-N) |
+| `nexspence_routing_rule` | ALLOW/BLOCK path routing rule |
+| `nexspence_webhook` | Outbound event webhook (HMAC-signed) |
+| `nexspence_promotion_rule` | Build-promotion rule (scan-pass / manual-approval gates) |
 
 **Data Sources (2)**
 
