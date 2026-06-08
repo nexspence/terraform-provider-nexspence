@@ -12,20 +12,20 @@ func TestRepositoryCRUD(t *testing.T) {
 		switch r.Method + " " + r.URL.Path {
 		case "POST /service/rest/v1/repositories/maven2/proxy":
 			var repo Repository
-			json.NewDecoder(r.Body).Decode(&repo)
+			_ = json.NewDecoder(r.Body).Decode(&repo)
 			if repo.Name != "maven-central" || repo.ProxyConfig["remote_url"] != "https://repo1.maven.org/maven2/" {
 				t.Errorf("create payload = %+v", repo)
 			}
 			repo.ID = "r-1"
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(repo)
+			_ = json.NewEncoder(w).Encode(repo)
 		case "GET /service/rest/v1/repositories/maven-central":
-			json.NewEncoder(w).Encode(Repository{ID: "r-1", Name: "maven-central",
+			_ = json.NewEncoder(w).Encode(Repository{ID: "r-1", Name: "maven-central",
 				Format: "maven2", Type: "proxy", BlobStoreID: "bs-1"})
 		case "GET /service/rest/v1/repositories":
-			json.NewEncoder(w).Encode([]Repository{{Name: "maven-central"}})
+			_ = json.NewEncoder(w).Encode([]Repository{{Name: "maven-central"}})
 		case "PUT /service/rest/v1/repositories/maven2/proxy/maven-central":
-			json.NewEncoder(w).Encode(Repository{ID: "r-1", Name: "maven-central"})
+			_ = json.NewEncoder(w).Encode(Repository{ID: "r-1", Name: "maven-central"})
 		case "DELETE /service/rest/v1/repositories/maven-central":
 			w.WriteHeader(http.StatusNoContent)
 		default:

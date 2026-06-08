@@ -12,20 +12,20 @@ func TestBlobStoreCRUD(t *testing.T) {
 		switch r.Method + " " + r.URL.Path {
 		case "POST /service/rest/v1/blobstores/s3":
 			var bs BlobStore
-			json.NewDecoder(r.Body).Decode(&bs)
+			_ = json.NewDecoder(r.Body).Decode(&bs)
 			if bs.Name != "s3-main" || bs.Config["bucket"] != "artifacts" {
 				t.Errorf("create payload = %+v", bs)
 			}
 			bs.ID = "bs-1"
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(bs)
+			_ = json.NewEncoder(w).Encode(bs)
 		case "GET /service/rest/v1/blobstores/s3-main":
-			json.NewEncoder(w).Encode(BlobStore{ID: "bs-1", Name: "s3-main", Type: "s3",
+			_ = json.NewEncoder(w).Encode(BlobStore{ID: "bs-1", Name: "s3-main", Type: "s3",
 				Config: map[string]any{"bucket": "artifacts"}, QuotaBytes: 100})
 		case "GET /service/rest/v1/blobstores":
-			json.NewEncoder(w).Encode([]BlobStore{{ID: "bs-1", Name: "s3-main", Type: "s3"}})
+			_ = json.NewEncoder(w).Encode([]BlobStore{{ID: "bs-1", Name: "s3-main", Type: "s3"}})
 		case "PUT /service/rest/v1/blobstores/s3/s3-main":
-			json.NewEncoder(w).Encode(BlobStore{ID: "bs-1", Name: "s3-main", Type: "s3"})
+			_ = json.NewEncoder(w).Encode(BlobStore{ID: "bs-1", Name: "s3-main", Type: "s3"})
 		case "DELETE /service/rest/v1/blobstores/s3-main":
 			w.WriteHeader(http.StatusNoContent)
 		default:

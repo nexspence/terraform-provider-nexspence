@@ -44,7 +44,7 @@ func TestDo_BearerAuth(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer nxs_test" {
 			t.Errorf("auth header = %q", got)
 		}
-		w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 	var out map[string]bool
 	if err := c.do(context.Background(), http.MethodGet, "/ping", nil, &out); err != nil {
@@ -76,7 +76,7 @@ func TestDo_BasicAuth(t *testing.T) {
 func TestDo_NotFound(t *testing.T) {
 	c := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":"not found: repo"}`))
+		_, _ = w.Write([]byte(`{"error":"not found: repo"}`))
 	})
 	err := c.do(context.Background(), http.MethodGet, "/x", nil, nil)
 	if !errors.Is(err, ErrNotFound) {
@@ -87,7 +87,7 @@ func TestDo_NotFound(t *testing.T) {
 func TestDo_APIError(t *testing.T) {
 	c := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"quota exceeds blob store quota"}`))
+		_, _ = w.Write([]byte(`{"error":"quota exceeds blob store quota"}`))
 	})
 	err := c.do(context.Background(), http.MethodPost, "/x", map[string]string{"a": "b"}, nil)
 	var apiErr *APIError
@@ -102,7 +102,7 @@ func TestDo_APIError(t *testing.T) {
 func TestDo_NonJSONError(t *testing.T) {
 	c := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
-		w.Write([]byte("<html>" + strings.Repeat("x", 400) + "</html>"))
+		_, _ = w.Write([]byte("<html>" + strings.Repeat("x", 400) + "</html>"))
 	})
 	err := c.do(context.Background(), http.MethodGet, "/x", nil, nil)
 	var apiErr *APIError

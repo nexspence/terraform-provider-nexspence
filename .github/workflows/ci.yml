@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - run: make lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - run: make test
+
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_wrapper: false }
+      # NOTE: requires ghcr.io/nexspence/nexspence to be a public package
+      - run: docker compose -f docker-compose.acc.yml up -d --wait
+      - run: make testacc
+      - if: always()
+        run: docker compose -f docker-compose.acc.yml down -v
+
+  docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - run: go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@latest generate
+      - run: git diff --exit-code docs/

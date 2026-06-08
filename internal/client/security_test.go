@@ -13,65 +13,65 @@ func TestSecurityCRUD(t *testing.T) {
 		// content selectors
 		case "POST /service/rest/v1/security/content-selectors":
 			var cs ContentSelector
-			json.NewDecoder(r.Body).Decode(&cs)
+			_ = json.NewDecoder(r.Body).Decode(&cs)
 			cs.ID = "cs-1"
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(cs)
+			_ = json.NewEncoder(w).Encode(cs)
 		case "GET /service/rest/v1/security/content-selectors/cs-1":
-			json.NewEncoder(w).Encode(ContentSelector{ID: "cs-1", Name: "team-a", Expression: `path.startsWith("/com/acme/")`})
+			_ = json.NewEncoder(w).Encode(ContentSelector{ID: "cs-1", Name: "team-a", Expression: `path.startsWith("/com/acme/")`})
 		case "GET /service/rest/v1/security/content-selectors":
-			json.NewEncoder(w).Encode([]ContentSelector{{ID: "cs-1", Name: "team-a"}})
+			_ = json.NewEncoder(w).Encode([]ContentSelector{{ID: "cs-1", Name: "team-a"}})
 		case "PUT /service/rest/v1/security/content-selectors/cs-1":
-			json.NewEncoder(w).Encode(ContentSelector{ID: "cs-1", Name: "team-a"})
+			_ = json.NewEncoder(w).Encode(ContentSelector{ID: "cs-1", Name: "team-a"})
 		case "DELETE /service/rest/v1/security/content-selectors/cs-1":
 			w.WriteHeader(http.StatusNoContent)
 		// privileges
 		case "POST /service/rest/v1/security/privileges":
 			var p Privilege
-			json.NewDecoder(r.Body).Decode(&p)
+			_ = json.NewDecoder(r.Body).Decode(&p)
 			if p.Type != "repository-content-selector" || p.ContentSelectorID != "cs-1" {
 				t.Errorf("privilege payload = %+v", p)
 			}
 			p.ID = "pr-1"
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(p)
+			_ = json.NewEncoder(w).Encode(p)
 		case "GET /service/rest/v1/security/privileges/pr-1":
-			json.NewEncoder(w).Encode(Privilege{ID: "pr-1", Name: "team-a-rw", ContentSelectorID: "cs-1"})
+			_ = json.NewEncoder(w).Encode(Privilege{ID: "pr-1", Name: "team-a-rw", ContentSelectorID: "cs-1"})
 		case "GET /service/rest/v1/security/privileges":
-			json.NewEncoder(w).Encode([]Privilege{{ID: "pr-1", Name: "team-a-rw"}})
+			_ = json.NewEncoder(w).Encode([]Privilege{{ID: "pr-1", Name: "team-a-rw"}})
 		case "PUT /service/rest/v1/security/privileges/pr-1":
-			json.NewEncoder(w).Encode(Privilege{ID: "pr-1", Name: "team-a-rw"})
+			_ = json.NewEncoder(w).Encode(Privilege{ID: "pr-1", Name: "team-a-rw"})
 		case "DELETE /service/rest/v1/security/privileges/pr-1":
 			w.WriteHeader(http.StatusNoContent)
 		// roles
 		case "POST /service/rest/v1/security/roles":
 			var ro Role
-			json.NewDecoder(r.Body).Decode(&ro)
+			_ = json.NewDecoder(r.Body).Decode(&ro)
 			ro.ID = "ro-1"
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(ro)
+			_ = json.NewEncoder(w).Encode(ro)
 		case "GET /service/rest/v1/security/roles":
-			json.NewEncoder(w).Encode([]Role{{ID: "ro-1", Name: "team-a-dev", Privileges: []string{"pr-1"}}})
+			_ = json.NewEncoder(w).Encode([]Role{{ID: "ro-1", Name: "team-a-dev", Privileges: []string{"pr-1"}}})
 		case "PUT /service/rest/v1/security/roles/ro-1":
-			json.NewEncoder(w).Encode(Role{ID: "ro-1", Name: "team-a-dev"})
+			_ = json.NewEncoder(w).Encode(Role{ID: "ro-1", Name: "team-a-dev"})
 		case "DELETE /service/rest/v1/security/roles/ro-1":
 			w.WriteHeader(http.StatusNoContent)
 		// users
 		case "POST /service/rest/v1/security/users":
 			body := map[string]any{}
-			json.NewDecoder(r.Body).Decode(&body)
+			_ = json.NewDecoder(r.Body).Decode(&body)
 			if body["userId"] != "alice" || body["password"] != "s3cret123" {
 				t.Errorf("user payload = %+v", body)
 			}
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(User{Username: "alice", Email: "a@x.io"})
+			_ = json.NewEncoder(w).Encode(User{Username: "alice", Email: "a@x.io"})
 		case "GET /service/rest/v1/security/users/alice":
-			json.NewEncoder(w).Encode(User{Username: "alice", Email: "a@x.io", Roles: []string{"team-a-dev"}})
+			_ = json.NewEncoder(w).Encode(User{Username: "alice", Email: "a@x.io", Roles: []string{"team-a-dev"}})
 		case "PUT /service/rest/v1/security/users/alice":
-			json.NewEncoder(w).Encode(User{Username: "alice", Email: "new@x.io"})
+			_ = json.NewEncoder(w).Encode(User{Username: "alice", Email: "new@x.io"})
 		case "PUT /service/rest/v1/security/users/alice/roles":
 			body := map[string][]string{}
-			json.NewDecoder(r.Body).Decode(&body)
+			_ = json.NewDecoder(r.Body).Decode(&body)
 			if len(body["roleIds"]) != 1 || body["roleIds"][0] != "ro-1" {
 				t.Errorf("roleIds = %+v", body)
 			}
