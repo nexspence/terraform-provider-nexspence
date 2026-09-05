@@ -16,7 +16,7 @@ terraform {
   required_providers {
     nexspence = {
       source  = "nexspence/nexspence"
-      version = "~> 0.1"
+      version = ">= 0.3.0"
     }
   }
 }
@@ -65,12 +65,12 @@ All four values can be supplied via environment variables instead of the provide
 
 ## Resources & Data Sources
 
-**Resources (10)**
+**Resources (11)**
 
 | Resource | Description |
 |---|---|
-| `nexspence_blobstore` | Blob store (local filesystem or S3-compatible) |
-| `nexspence_repository` | Repository — hosted, proxy, or group — any of the 14 supported formats |
+| `nexspence_blobstore` | Blob store (local filesystem, S3-compatible, or group) |
+| `nexspence_repository` | Repository — hosted, proxy, or group — any of the 16 supported formats |
 | `nexspence_content_selector` | CEL-expression content selector |
 | `nexspence_privilege` | Repository content-selector privilege |
 | `nexspence_role` | Role (collection of privileges) |
@@ -79,6 +79,7 @@ All four values can be supplied via environment variables instead of the provide
 | `nexspence_routing_rule` | ALLOW/BLOCK path routing rule |
 | `nexspence_webhook` | Outbound event webhook (HMAC-signed) |
 | `nexspence_promotion_rule` | Build-promotion rule (scan-pass / manual-approval gates) |
+| `nexspence_replication_rule` | Push-replication rule to a remote Nexspence instance |
 
 **Data Sources (2)**
 

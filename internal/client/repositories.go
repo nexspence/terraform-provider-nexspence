@@ -20,7 +20,10 @@ type Repository struct {
 	FormatConfig     map[string]any `json:"formatConfig,omitempty"`
 	ProxyConfig      map[string]any `json:"proxyConfig,omitempty"`
 	CleanupPolicyIDs []string       `json:"cleanupPolicyIds,omitempty"`
-	URL              string         `json:"url,omitempty"`
+	// RoutingRuleID is a pointer so an explicit empty string can clear the
+	// attachment on update (omitempty still drops a nil pointer).
+	RoutingRuleID *string `json:"routingRuleId,omitempty"`
+	URL           string  `json:"url,omitempty"`
 }
 
 func (c *Client) ListRepositories(ctx context.Context) ([]Repository, error) {

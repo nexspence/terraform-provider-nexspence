@@ -19,9 +19,10 @@ services:
     environment:
       NEXSPENCE_DATABASE_DSN: "postgres://nexspence:nexspence@postgres:5432/nexspence?sslmode=disable"
       NEXSPENCE_AUTH_JWT_SECRET: "acceptance-test-secret-min-32-chars!!"
+      NEXSPENCE_AUTH_ALLOW_INSECURE_DEFAULTS: "true"
       NEXSPENCE_HTTP_ADDR: ":8081"
       NEXSPENCE_STORAGE_DEFAULT_TYPE: "local"
-      NEXSPENCE_STORAGE_LOCAL_BASE_PATH: "/data/blobs"
+      NEXSPENCE_STORAGE_LOCAL_BASE_PATH: "/app/data/blobs"
     ports:
       - "8082:8081"
     healthcheck:

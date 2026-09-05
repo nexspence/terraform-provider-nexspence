@@ -95,6 +95,7 @@ func (p *nexspenceProvider) Resources(_ context.Context) []func() resource.Resou
 		NewBlobStoreResource, NewRepositoryResource, NewContentSelectorResource,
 		NewPrivilegeResource, NewRoleResource, NewUserResource,
 		NewCleanupPolicyResource, NewRoutingRuleResource, NewWebhookResource, NewPromotionRuleResource,
+		NewReplicationRuleResource,
 	}
 }
 
