@@ -13,8 +13,6 @@ A routing rule restricting which paths a repository may request. Attach it to a 
 ## Example Usage
 
 ```terraform
-# Manage routing rules as code. Attaching a rule to a repository is not yet a
-# provider field — assign it in the UI (Admin → Routing Rules) or via the API.
 resource "nexspence_routing_rule" "block_snapshots" {
   name        = "block-snapshots"
   description = "Deny any path containing -SNAPSHOT"
@@ -22,10 +20,14 @@ resource "nexspence_routing_rule" "block_snapshots" {
   matchers    = [".*-SNAPSHOT.*"]
 }
 
-resource "nexspence_routing_rule" "allow_acme" {
-  name     = "allow-acme-only"
-  mode     = "ALLOW"
-  matchers = ["^/com/acme/.*"]
+resource "nexspence_repository" "maven_group" {
+  name            = "maven-all"
+  format          = "maven2"
+  type            = "group"
+  routing_rule_id = nexspence_routing_rule.block_snapshots.id
+  group {
+    member_names = ["maven-releases", "maven-central"]
+  }
 }
 ```
 

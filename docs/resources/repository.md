@@ -32,6 +32,26 @@ resource "nexspence_repository" "maven_central" {
   }
 }
 
+# npm proxy with a 7-day minimum package age and upstream Basic auth.
+resource "nexspence_repository" "npm_proxy" {
+  name   = "npm-proxy"
+  format = "npm"
+  type   = "proxy"
+  proxy {
+    remote_url          = "https://registry.npmjs.org/"
+    remote_username     = "deploy"
+    remote_password     = var.npm_upstream_password
+    minimum_package_age = 7 * 24 * 3600
+  }
+}
+
+# RubyGems hosted repository (gem push / yank).
+resource "nexspence_repository" "gems" {
+  name   = "gems-hosted"
+  format = "rubygems"
+  type   = "hosted"
+}
+
 # Group repository — aggregates hosted and proxy repos.
 resource "nexspence_repository" "maven_all" {
   name       = "maven-all"
@@ -57,6 +77,7 @@ resource "nexspence_repository" "maven_all" {
 ### Optional
 
 - `allow_anonymous` (Boolean)
+- `apt` (Block, Optional) APT hosted signing (format = apt). (see [below for nested schema](#nestedblock--apt))
 - `blob_store` (String) Blob store name (resolved to its ID against the API).
 - `cleanup_policy_ids` (List of String)
 - `description` (String)
@@ -64,11 +85,21 @@ resource "nexspence_repository" "maven_all" {
 - `online` (Boolean)
 - `proxy` (Block, Optional) Proxy settings (type = proxy). (see [below for nested schema](#nestedblock--proxy))
 - `quota_bytes` (Number)
+- `routing_rule_id` (String) ID of a routing rule (nexspence_routing_rule.id) attached to this repository. Empty/omitted detaches it.
 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
 - `url` (String)
+
+<a id="nestedblock--apt"></a>
+### Nested Schema for `apt`
+
+Optional:
+
+- `signing_key` (String, Sensitive) ASCII-armored OpenPGP private key used to sign Release/InRelease.
+- `signing_key_passphrase` (String, Sensitive) Passphrase for the signing key, when the key is protected.
+
 
 <a id="nestedblock--group"></a>
 ### Nested Schema for `group`
@@ -84,4 +115,14 @@ Optional:
 
 Optional:
 
+- `http_proxy` (String) Outbound HTTP forward-proxy URL used to reach the upstream.
+- `https_proxy` (String) Outbound HTTPS forward-proxy URL used to reach the upstream.
+- `metadata_max_age` (Number) Freshness TTL for proxied metadata (indexes, packuments) in seconds. Default on the server is 600.
+- `minimum_package_age` (Number) Supply-chain gate for npm/PyPI proxies: hide versions younger than this many seconds.
+- `no_proxy` (String) Comma-separated hosts that bypass the outbound proxy.
+- `proxy_password` (String, Sensitive) Password for the outbound forward proxy. Write-only — the API never returns it.
+- `proxy_username` (String) Username for the outbound forward proxy (not the upstream registry).
+- `remote_password` (String, Sensitive) HTTP Basic password for the upstream registry. Write-only — the API never returns it.
 - `remote_url` (String)
+- `remote_username` (String) HTTP Basic username for the upstream registry itself (private Maven, Mapbox, corporate npm).
+- `socks5_proxy` (String) Outbound SOCKS5 proxy (takes precedence over http(s)_proxy).

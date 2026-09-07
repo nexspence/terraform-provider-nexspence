@@ -18,3 +18,13 @@ resource "nexspence_blobstore" "s3" {
     force_path_style = true
   }
 }
+
+# Group blob store — spread writes across two physical stores.
+resource "nexspence_blobstore" "tiered" {
+  name = "tiered"
+  type = "group"
+  group = {
+    fill_policy = "write_to_first_fill"
+    members     = [nexspence_blobstore.local.name, nexspence_blobstore.s3.name]
+  }
+}

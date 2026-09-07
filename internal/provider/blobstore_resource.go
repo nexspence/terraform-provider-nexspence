@@ -34,13 +34,19 @@ type blobStoreS3Model struct {
 	ForcePathStyle types.Bool   `tfsdk:"force_path_style"`
 }
 
+type blobStoreGroupModel struct {
+	FillPolicy types.String   `tfsdk:"fill_policy"`
+	Members    []types.String `tfsdk:"members"`
+}
+
 type blobStoreModel struct {
-	ID         types.String      `tfsdk:"id"`
-	Name       types.String      `tfsdk:"name"`
-	Type       types.String      `tfsdk:"type"`
-	Path       types.String      `tfsdk:"path"`
-	S3         *blobStoreS3Model `tfsdk:"s3"`
-	QuotaBytes types.Int64       `tfsdk:"quota_bytes"`
+	ID         types.String         `tfsdk:"id"`
+	Name       types.String         `tfsdk:"name"`
+	Type       types.String         `tfsdk:"type"`
+	Path       types.String         `tfsdk:"path"`
+	S3         *blobStoreS3Model    `tfsdk:"s3"`
+	Group      *blobStoreGroupModel `tfsdk:"group"`
+	QuotaBytes types.Int64          `tfsdk:"quota_bytes"`
 }
 
 func (r *blobStoreResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -49,7 +55,7 @@ func (r *blobStoreResource) Metadata(_ context.Context, req resource.MetadataReq
 
 func (r *blobStoreResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "A Nexspence blob store (local filesystem or S3).",
+		Description: "A Nexspence blob store (local filesystem, S3, or a group of other stores).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -61,7 +67,7 @@ func (r *blobStoreResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"type": schema.StringAttribute{
 				Required:      true,
-				Validators:    []validator.String{stringvalidator.OneOf("local", "s3")},
+				Validators:    []validator.String{stringvalidator.OneOf("local", "s3", "group")},
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"path": schema.StringAttribute{
@@ -84,6 +90,22 @@ func (r *blobStoreResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 					"force_path_style": schema.BoolAttribute{Optional: true},
 				},
 			},
+			"group": schema.SingleNestedAttribute{
+				Optional:    true,
+				Description: "Group members and fill policy (type = group).",
+				Attributes: map[string]schema.Attribute{
+					"fill_policy": schema.StringAttribute{
+						Required:    true,
+						Description: "How writes pick a member: round_robin or write_to_first_fill.",
+						Validators:  []validator.String{stringvalidator.OneOf("round_robin", "write_to_first_fill")},
+					},
+					"members": schema.ListAttribute{
+						Required:    true,
+						ElementType: types.StringType,
+						Description: "Member blob store names (resolved to IDs). Groups cannot nest.",
+					},
+				},
+			},
 		},
 	}
 }
@@ -99,9 +121,23 @@ func (r *blobStoreResource) ValidateConfig(ctx context.Context, req resource.Val
 		if data.S3 == nil {
 			resp.Diagnostics.AddAttributeError(path.Root("s3"), "Missing s3 block", `type = "s3" requires an s3 block`)
 		}
+		if data.Group != nil {
+			resp.Diagnostics.AddAttributeError(path.Root("group"), "Unexpected group block", `group block is only valid when type = "group"`)
+		}
+	case "group":
+		if data.Group == nil || len(data.Group.Members) == 0 {
+			resp.Diagnostics.AddAttributeError(path.Root("group"), "Missing group configuration",
+				`type = "group" requires a group block with members`)
+		}
+		if data.S3 != nil {
+			resp.Diagnostics.AddAttributeError(path.Root("s3"), "Unexpected s3 block", `s3 block is only valid when type = "s3"`)
+		}
 	case "local":
 		if data.S3 != nil {
 			resp.Diagnostics.AddAttributeError(path.Root("s3"), "Unexpected s3 block", `s3 block is only valid when type = "s3"`)
+		}
+		if data.Group != nil {
+			resp.Diagnostics.AddAttributeError(path.Root("group"), "Unexpected group block", `group block is only valid when type = "group"`)
 		}
 	}
 }
@@ -118,8 +154,9 @@ func (r *blobStoreResource) Configure(_ context.Context, req resource.ConfigureR
 	r.client = c
 }
 
-// toAPI builds the API payload from the plan model.
-func (m *blobStoreModel) toAPI() *client.BlobStore {
+// toAPI builds the API payload from the plan model. Group members are names
+// in Terraform and IDs on the wire, so this resolves them against the API.
+func (r *blobStoreResource) toAPI(ctx context.Context, m *blobStoreModel) (*client.BlobStore, error) {
 	cfg := map[string]any{}
 	switch m.Type.ValueString() {
 	case "local":
@@ -143,13 +180,41 @@ func (m *blobStoreModel) toAPI() *client.BlobStore {
 		if !m.S3.ForcePathStyle.IsNull() {
 			cfg["force_path_style"] = m.S3.ForcePathStyle.ValueBool()
 		}
+	case "group":
+		ids, err := r.memberIDsByName(ctx, m.Group.Members)
+		if err != nil {
+			return nil, err
+		}
+		cfg["fill_policy"] = m.Group.FillPolicy.ValueString()
+		cfg["member_ids"] = ids
 	}
 	return &client.BlobStore{
 		Name:       m.Name.ValueString(),
 		Type:       m.Type.ValueString(),
 		Config:     cfg,
 		QuotaBytes: m.QuotaBytes.ValueInt64(),
+	}, nil
+}
+
+func (r *blobStoreResource) memberIDsByName(ctx context.Context, names []types.String) ([]string, error) {
+	stores, err := r.client.ListBlobStores(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list blob stores: %w", err)
 	}
+	byName := make(map[string]string, len(stores))
+	for _, s := range stores {
+		byName[s.Name] = s.ID
+	}
+	ids := make([]string, 0, len(names))
+	for _, n := range names {
+		name := n.ValueString()
+		id, ok := byName[name]
+		if !ok {
+			return nil, fmt.Errorf("blob store %q not found", name)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 // fromAPI refreshes non-secret state from the API object. Secrets (secret_key)
@@ -172,7 +237,10 @@ func (m *blobStoreModel) fromAPI(bs *client.BlobStore) {
 	switch bs.Type {
 	case "local":
 		m.Path = str("path")
+		m.S3 = nil
+		m.Group = nil
 	case "s3":
+		m.Group = nil
 		if m.S3 == nil {
 			m.S3 = &blobStoreS3Model{SecretKey: types.StringNull()}
 		}
@@ -185,7 +253,49 @@ func (m *blobStoreModel) fromAPI(bs *client.BlobStore) {
 		} else {
 			m.S3.ForcePathStyle = types.BoolNull()
 		}
+	case "group":
+		m.S3 = nil
+		m.Path = types.StringNull()
+		g := &blobStoreGroupModel{FillPolicy: str("fill_policy")}
+		// member_ids stay as IDs here; Create/Read resolve to names afterwards.
+		switch raw := bs.Config["member_ids"].(type) {
+		case []string:
+			for _, s := range raw {
+				g.Members = append(g.Members, types.StringValue(s))
+			}
+		case []any:
+			for _, v := range raw {
+				if s, ok := v.(string); ok {
+					g.Members = append(g.Members, types.StringValue(s))
+				}
+			}
+		}
+		m.Group = g
 	}
+}
+
+func (r *blobStoreResource) resolveGroupMemberNames(ctx context.Context, m *blobStoreModel) error {
+	if m.Group == nil {
+		return nil
+	}
+	stores, err := r.client.ListBlobStores(ctx)
+	if err != nil {
+		return fmt.Errorf("list blob stores: %w", err)
+	}
+	byID := make(map[string]string, len(stores))
+	for _, s := range stores {
+		byID[s.ID] = s.Name
+	}
+	names := make([]types.String, 0, len(m.Group.Members))
+	for _, id := range m.Group.Members {
+		if name, ok := byID[id.ValueString()]; ok {
+			names = append(names, types.StringValue(name))
+		} else {
+			names = append(names, id)
+		}
+	}
+	m.Group.Members = names
+	return nil
 }
 
 func (r *blobStoreResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -194,12 +304,25 @@ func (r *blobStoreResource) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	created, err := r.client.CreateBlobStore(ctx, plan.toAPI())
+	payload, err := r.toAPI(ctx, &plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Create blob store failed", err.Error())
 		return
 	}
+	if _, err := r.client.CreateBlobStore(ctx, payload); err != nil {
+		resp.Diagnostics.AddError("Create blob store failed", err.Error())
+		return
+	}
+	created, err := r.client.GetBlobStore(ctx, plan.Name.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Refresh after create failed", err.Error())
+		return
+	}
 	plan.fromAPI(created)
+	if err := r.resolveGroupMemberNames(ctx, &plan); err != nil {
+		resp.Diagnostics.AddError("Refresh after create failed", err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -219,6 +342,10 @@ func (r *blobStoreResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 	state.fromAPI(bs)
+	if err := r.resolveGroupMemberNames(ctx, &state); err != nil {
+		resp.Diagnostics.AddError("Read blob store failed", err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -228,7 +355,12 @@ func (r *blobStoreResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if _, err := r.client.UpdateBlobStore(ctx, plan.toAPI()); err != nil {
+	payload, err := r.toAPI(ctx, &plan)
+	if err != nil {
+		resp.Diagnostics.AddError("Update blob store failed", err.Error())
+		return
+	}
+	if _, err := r.client.UpdateBlobStore(ctx, payload); err != nil {
 		resp.Diagnostics.AddError("Update blob store failed", err.Error())
 		return
 	}
@@ -239,6 +371,10 @@ func (r *blobStoreResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 	plan.fromAPI(bs)
+	if err := r.resolveGroupMemberNames(ctx, &plan); err != nil {
+		resp.Diagnostics.AddError("Read blob store after update failed", err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 

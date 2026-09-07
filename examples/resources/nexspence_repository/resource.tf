@@ -17,6 +17,26 @@ resource "nexspence_repository" "maven_central" {
   }
 }
 
+# npm proxy with a 7-day minimum package age and upstream Basic auth.
+resource "nexspence_repository" "npm_proxy" {
+  name   = "npm-proxy"
+  format = "npm"
+  type   = "proxy"
+  proxy {
+    remote_url          = "https://registry.npmjs.org/"
+    remote_username     = "deploy"
+    remote_password     = var.npm_upstream_password
+    minimum_package_age = 7 * 24 * 3600
+  }
+}
+
+# RubyGems hosted repository (gem push / yank).
+resource "nexspence_repository" "gems" {
+  name   = "gems-hosted"
+  format = "rubygems"
+  type   = "hosted"
+}
+
 # Group repository — aggregates hosted and proxy repos.
 resource "nexspence_repository" "maven_all" {
   name       = "maven-all"
