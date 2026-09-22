@@ -70,7 +70,7 @@ All four values can be supplied via environment variables instead of the provide
 | Resource | Description |
 |---|---|
 | `nexspence_blobstore` | Blob store (local filesystem, S3-compatible, or group) |
-| `nexspence_repository` | Repository — hosted, proxy, or group — any of the 16 supported formats |
+| `nexspence_repository` | Repository — hosted, proxy, or group — any of the 19 supported formats |
 | `nexspence_content_selector` | CEL-expression content selector |
 | `nexspence_privilege` | Repository content-selector privilege |
 | `nexspence_role` | Role (collection of privileges) |

@@ -3,6 +3,13 @@
 All notable changes to the Nexspence Terraform provider are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- `nexspence_repository` formats `cran`, `alpine` (server >= 2.7.0) and
+  `huggingface` (server >= 2.8.0) — 19 formats total.
+
 ## 0.3.0
 
 ### Added

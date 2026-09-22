@@ -24,10 +24,13 @@ import (
 	"github.com/nexspence/terraform-provider-nexspence/internal/client"
 )
 
-// repoFormats is the full Nexspence format enum (16 formats).
+// repoFormats is the full Nexspence format enum (19 formats), mirroring
+// domain.AllFormats on the server. cran and alpine need server >= 2.7.0,
+// huggingface >= 2.8.0; older servers reject them at create time.
 var repoFormats = []string{
 	"maven2", "npm", "pypi", "docker", "oci", "go", "nuget", "raw",
 	"apt", "yum", "helm", "cargo", "conan", "conda", "terraform", "rubygems",
+	"cran", "alpine", "huggingface",
 }
 
 // NewRepositoryResource is registered in provider.Resources.
