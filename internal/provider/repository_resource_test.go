@@ -111,6 +111,18 @@ resource "nexspence_repository" "oci" {
   type   = "hosted"
 }
 
+resource "nexspence_repository" "cran" {
+  name   = "acc-cran-hosted"
+  format = "cran"
+  type   = "hosted"
+}
+
+resource "nexspence_repository" "alpine" {
+  name   = "acc-alpine-hosted"
+  format = "alpine"
+  type   = "hosted"
+}
+
 resource "nexspence_repository" "npm_proxy" {
   name   = "acc-npm-proxy"
   format = "npm"
@@ -140,6 +152,8 @@ resource "nexspence_repository" "group" {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("nexspence_repository.gems", "format", "rubygems"),
 					resource.TestCheckResourceAttr("nexspence_repository.oci", "format", "oci"),
+					resource.TestCheckResourceAttr("nexspence_repository.cran", "format", "cran"),
+					resource.TestCheckResourceAttr("nexspence_repository.alpine", "format", "alpine"),
 					resource.TestCheckResourceAttr("nexspence_repository.npm_proxy", "proxy.remote_username", "deploy"),
 					resource.TestCheckResourceAttr("nexspence_repository.npm_proxy", "proxy.minimum_package_age", "604800"),
 					resource.TestCheckResourceAttrSet("nexspence_repository.group", "routing_rule_id"),
