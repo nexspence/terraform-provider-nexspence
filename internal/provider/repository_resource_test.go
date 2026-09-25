@@ -163,6 +163,154 @@ resource "nexspence_repository" "group" {
 	})
 }
 
+func TestAccRepository_writePolicy(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "nexspence_repository" "once" {
+  name         = "acc-raw-write-once"
+  format       = "raw"
+  type         = "hosted"
+  write_policy = "allow_once"
+}
+
+resource "nexspence_repository" "docker" {
+  name                  = "acc-docker-write-once"
+  format                = "docker"
+  type                  = "hosted"
+  write_policy          = "allow_once"
+  allow_redeploy_latest = true
+}`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("nexspence_repository.once", "write_policy", "allow_once"),
+					resource.TestCheckResourceAttr("nexspence_repository.once", "allow_redeploy_latest", "false"),
+					resource.TestCheckResourceAttr("nexspence_repository.docker", "write_policy", "allow_once"),
+					resource.TestCheckResourceAttr("nexspence_repository.docker", "allow_redeploy_latest", "true"),
+				),
+			},
+			{
+				Config: `
+resource "nexspence_repository" "once" {
+  name         = "acc-raw-write-once"
+  format       = "raw"
+  type         = "hosted"
+  write_policy = "deny"
+}
+
+resource "nexspence_repository" "docker" {
+  name         = "acc-docker-write-once"
+  format       = "docker"
+  type         = "hosted"
+  write_policy = "allow"
+}`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("nexspence_repository.once", "write_policy", "deny"),
+					resource.TestCheckResourceAttr("nexspence_repository.docker", "write_policy", "allow"),
+					resource.TestCheckResourceAttr("nexspence_repository.docker", "allow_redeploy_latest", "false"),
+				),
+			},
+		},
+	})
+}
+
+func TestApplyWritePolicy(t *testing.T) {
+	hosted := &repositoryModel{
+		Type:                types.StringValue("hosted"),
+		Format:              types.StringValue("maven2"),
+		WritePolicy:         types.StringValue("allow_once"),
+		AllowRedeployLatest: types.BoolValue(false),
+	}
+	fc := map[string]any{}
+	applyWritePolicy(fc, hosted, nil)
+	if fc["write_policy"] != "allow_once" {
+		t.Fatalf("write_policy = %v", fc["write_policy"])
+	}
+	if _, ok := fc["allow_redeploy_latest"]; ok {
+		t.Fatalf("allow_redeploy_latest set on maven: %v", fc)
+	}
+
+	docker := &repositoryModel{
+		Type:                types.StringValue("hosted"),
+		Format:              types.StringValue("docker"),
+		WritePolicy:         types.StringValue("allow_once"),
+		AllowRedeployLatest: types.BoolValue(true),
+	}
+	fc = map[string]any{}
+	applyWritePolicy(fc, docker, nil)
+	if fc["allow_redeploy_latest"] != true {
+		t.Fatalf("allow_redeploy_latest = %v", fc["allow_redeploy_latest"])
+	}
+
+	def := &repositoryModel{
+		Type:        types.StringValue("hosted"),
+		Format:      types.StringValue("maven2"),
+		WritePolicy: types.StringValue("allow"),
+	}
+	fc = map[string]any{}
+	applyWritePolicy(fc, def, nil)
+	if len(fc) != 0 {
+		t.Fatalf("default hosted must not send formatConfig: %v", fc)
+	}
+
+	fc = map[string]any{}
+	applyWritePolicy(fc, def, hosted)
+	if fc["write_policy"] != "allow" {
+		t.Fatalf("clear back to allow = %v", fc)
+	}
+
+	fc = map[string]any{"signing_key": "k"}
+	applyWritePolicy(fc, def, nil)
+	if fc["write_policy"] != "allow" || fc["signing_key"] != "k" {
+		t.Fatalf("apt + default policy = %v", fc)
+	}
+
+	proxy := &repositoryModel{
+		Type:        types.StringValue("proxy"),
+		Format:      types.StringValue("maven2"),
+		WritePolicy: types.StringValue("allow"),
+	}
+	fc = map[string]any{}
+	applyWritePolicy(fc, proxy, nil)
+	if len(fc) != 0 {
+		t.Fatalf("proxy formatConfig = %v", fc)
+	}
+
+	out := &repositoryModel{}
+	readWritePolicy("hosted", map[string]any{"write_policy": "deny", "allow_redeploy_latest": true}, out)
+	if out.WritePolicy.ValueString() != "deny" || !out.AllowRedeployLatest.ValueBool() {
+		t.Fatalf("readWritePolicy = %+v", out)
+	}
+	out = &repositoryModel{}
+	readWritePolicy("hosted", nil, out)
+	if out.WritePolicy.ValueString() != "allow" || out.AllowRedeployLatest.ValueBool() {
+		t.Fatalf("absent policy = %+v", out)
+	}
+	out = &repositoryModel{}
+	readWritePolicy("group", map[string]any{"write_policy": "deny"}, out)
+	if out.WritePolicy.ValueString() != "allow" {
+		t.Fatalf("group must ignore stored policy: %q", out.WritePolicy.ValueString())
+	}
+}
+
+func TestOverlayFormatConfig(t *testing.T) {
+	got := overlayFormatConfig(
+		map[string]any{"signing_key": "k", "write_policy": "allow_once", "allow_redeploy_latest": true},
+		map[string]any{"write_policy": "allow"},
+	)
+	if got["signing_key"] != "k" || got["write_policy"] != "allow" {
+		t.Fatalf("overlay = %v", got)
+	}
+	if _, ok := got["allow_redeploy_latest"]; ok {
+		t.Fatalf("allow_redeploy_latest not cleared: %v", got)
+	}
+	if overlayFormatConfig(map[string]any{"keep": 1}, nil) != nil {
+		t.Fatal("nil updates must skip replace")
+	}
+}
+
 func TestCfgInt64(t *testing.T) {
 	cfg := map[string]any{
 		"seconds_f":  float64(604800),
