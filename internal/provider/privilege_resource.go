@@ -4,18 +4,31 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 
 	"github.com/nexspence/terraform-provider-nexspence/internal/client"
 )
 
 const privilegeType = "repository-content-selector"
+
+// privilegeActions lists the actions the RBAC engine understands for a
+// content-selector privilege.
+var privilegeActions = []string{"read", "browse", "write", "delete"}
+
+// defaultPrivilegeActions is used when a configuration omits `actions` and
+// the resource is created. The server rejects a content-selector privilege
+// that names no action, so some list has to be sent.
+var defaultPrivilegeActions = []string{"read"}
 
 // NewPrivilegeResource is registered in provider.Resources.
 func NewPrivilegeResource() resource.Resource { return &privilegeResource{} }
@@ -29,6 +42,7 @@ type privilegeModel struct {
 	Name            types.String `tfsdk:"name"`
 	Description     types.String `tfsdk:"description"`
 	ContentSelector types.String `tfsdk:"content_selector"`
+	Actions         types.Set    `tfsdk:"actions"`
 }
 
 func (r *privilegeResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -52,8 +66,71 @@ func (r *privilegeResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Required:    true,
 				Description: "Name of the content selector this privilege grants access through.",
 			},
+			"actions": schema.SetAttribute{
+				Optional:    true,
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Actions this privilege grants on the assets its content selector matches: " +
+					strings.Join(privilegeActions, ", ") + ". " +
+					"Defaults to " + strings.Join(defaultPrivilegeActions, ", ") + " on creation. " +
+					"The server rejects a content-selector privilege that names no action.",
+				Validators: []validator.Set{
+					setvalidator.SizeAtLeast(1),
+					setvalidator.ValueStringsAre(stringvalidator.OneOf(privilegeActions...)),
+				},
+			},
 		},
 	}
+}
+
+// privilegeActionsFromAPI decodes the actions of an API privilege.
+//
+// A privilege stored without attrs.actions grants every action — the RBAC
+// engine treats an empty list as "all" — so it is reported as the full action
+// list. The server has rejected such a privilege on write since v2.10.0, so
+// this only applies to privileges created before that.
+func privilegeActionsFromAPI(p *client.Privilege) []string {
+	if p != nil {
+		switch v := p.Attrs["actions"].(type) {
+		case []any:
+			out := make([]string, 0, len(v))
+			for _, a := range v {
+				if s, ok := a.(string); ok {
+					out = append(out, s)
+				}
+			}
+			if len(out) > 0 {
+				return out
+			}
+		case []string:
+			if len(v) > 0 {
+				return v
+			}
+		}
+	}
+	return append([]string(nil), privilegeActions...)
+}
+
+// privilegeActionsAttr builds the attrs payload sent to the API. The server
+// decodes attrs.actions as a list of strings.
+func privilegeActionsAttr(actions []string) map[string]any {
+	return map[string]any{"actions": actions}
+}
+
+// privilegeActionsFromPlan resolves the actions to send: the configured set
+// when the configuration names them, the default otherwise.
+func privilegeActionsFromPlan(ctx context.Context, s types.Set) ([]string, error) {
+	if s.IsNull() || s.IsUnknown() {
+		return append([]string(nil), defaultPrivilegeActions...), nil
+	}
+	var actions []string
+	if diags := s.ElementsAs(ctx, &actions, false); diags.HasError() {
+		return nil, errors.New("decode actions")
+	}
+	if len(actions) == 0 {
+		return append([]string(nil), defaultPrivilegeActions...), nil
+	}
+	return actions, nil
 }
 
 func (r *privilegeResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -101,6 +178,11 @@ func (r *privilegeResource) fromAPI(ctx context.Context, m *privilegeModel, p *c
 			m.ContentSelector = types.StringValue(cs.Name)
 		}
 	}
+	actions, diags := types.SetValueFrom(ctx, types.StringType, privilegeActionsFromAPI(p))
+	if diags.HasError() {
+		return errors.New("build actions set")
+	}
+	m.Actions = actions
 	return nil
 }
 
@@ -115,11 +197,17 @@ func (r *privilegeResource) Create(ctx context.Context, req resource.CreateReque
 		resp.Diagnostics.AddError("Create privilege failed", err.Error())
 		return
 	}
+	actions, err := privilegeActionsFromPlan(ctx, plan.Actions)
+	if err != nil {
+		resp.Diagnostics.AddError("Create privilege failed", err.Error())
+		return
+	}
 	created, err := r.client.CreatePrivilege(ctx, &client.Privilege{
 		Name:              plan.Name.ValueString(),
 		Description:       plan.Description.ValueString(),
 		Type:              privilegeType,
 		ContentSelectorID: csID,
+		Attrs:             privilegeActionsAttr(actions),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Create privilege failed", err.Error())
@@ -167,12 +255,18 @@ func (r *privilegeResource) Update(ctx context.Context, req resource.UpdateReque
 		resp.Diagnostics.AddError("Update privilege failed", err.Error())
 		return
 	}
+	actions, err := privilegeActionsFromPlan(ctx, plan.Actions)
+	if err != nil {
+		resp.Diagnostics.AddError("Update privilege failed", err.Error())
+		return
+	}
 	updated, err := r.client.UpdatePrivilege(ctx, &client.Privilege{
 		ID:                plan.ID.ValueString(),
 		Name:              plan.Name.ValueString(),
 		Description:       plan.Description.ValueString(),
 		Type:              privilegeType,
 		ContentSelectorID: csID,
+		Attrs:             privilegeActionsAttr(actions),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Update privilege failed", err.Error())

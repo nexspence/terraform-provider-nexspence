@@ -17,6 +17,7 @@ resource "nexspence_privilege" "team_a_rw" {
   name             = "team-a-rw"
   description      = "Access scoped by the team-a content selector"
   content_selector = nexspence_content_selector.team_a.name
+  actions          = ["read", "write"]
 }
 ```
 
@@ -30,6 +31,7 @@ resource "nexspence_privilege" "team_a_rw" {
 
 ### Optional
 
+- `actions` (Set of String) Actions this privilege grants on the assets its content selector matches: read, browse, write, delete. Defaults to read on creation. The server rejects a content-selector privilege that names no action.
 - `description` (String)
 
 ### Read-Only

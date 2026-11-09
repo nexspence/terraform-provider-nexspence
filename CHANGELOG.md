@@ -11,6 +11,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   hosted deployment policy.
 - `allow_redeploy_latest` — under `allow_once`, hosted docker/oci may re-push
   the `latest` tag.
+- `actions` on `nexspence_privilege` — the actions the privilege grants on the
+  assets its content selector matches (`read`, `browse`, `write`, `delete`).
+
+### Fixed
+
+- `nexspence_privilege` sends the actions the server requires. Since server
+  v2.10.0 a content-selector privilege without `attrs.actions` is rejected with
+  `400 at least one action is required`, which broke `nexspence_privilege` and
+  every `nexspence_role` that referenced it. `actions` defaults to `read` when
+  the configuration omits it.
 
 ## 0.4.0
 

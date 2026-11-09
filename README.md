@@ -16,7 +16,7 @@ terraform {
   required_providers {
     nexspence = {
       source  = "nexspence/nexspence"
-      version = ">= 0.4.0"
+      version = ">= 0.5.0"
     }
   }
 }
@@ -137,6 +137,7 @@ resource "nexspence_content_selector" "team_a" {
 resource "nexspence_privilege" "team_a_rw" {
   name             = "team-a-rw"
   content_selector = nexspence_content_selector.team_a.name
+  actions          = ["read", "write"]
 }
 
 resource "nexspence_role" "team_a_dev" {

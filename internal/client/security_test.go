@@ -7,6 +7,64 @@ import (
 	"testing"
 )
 
+// TestPrivilegeActionsPayload asserts that a privilege carries its actions in
+// the attrs map, both on the wire and on the way back from the API. The server
+// rejects content-selector privileges without attrs.actions (400 "at least one
+// action is required") since v2.10.0.
+func TestPrivilegeActionsPayload(t *testing.T) {
+	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "POST /service/rest/v1/security/privileges":
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			attrs, ok := body["attrs"].(map[string]any)
+			if !ok {
+				t.Fatalf("privilege payload has no attrs: %+v", body)
+			}
+			actions, ok := attrs["actions"].([]any)
+			if !ok || len(actions) != 2 || actions[0] != "read" || actions[1] != "write" {
+				t.Fatalf("attrs.actions = %+v, want [read write]", attrs["actions"])
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "pr-1", "name": "team-a-rw"})
+		case "GET /service/rest/v1/security/privileges/pr-1":
+			_ = json.NewEncoder(w).Encode(Privilege{
+				ID:   "pr-1",
+				Name: "team-a-rw",
+				Attrs: map[string]any{
+					"actions": []any{"read", "write"},
+				},
+			})
+		default:
+			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusTeapot)
+		}
+	})
+	ctx := context.Background()
+
+	created, err := c.CreatePrivilege(ctx, &Privilege{
+		Name:              "team-a-rw",
+		Type:              "repository-content-selector",
+		ContentSelectorID: "cs-1",
+		Attrs:             map[string]any{"actions": []string{"read", "write"}},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if created.ID != "pr-1" {
+		t.Fatalf("created = %+v", created)
+	}
+
+	got, err := c.GetPrivilege(ctx, "pr-1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	actions, ok := got.Attrs["actions"].([]any)
+	if !ok || len(actions) != 2 || actions[0] != "read" || actions[1] != "write" {
+		t.Fatalf("decoded attrs.actions = %+v, want [read write]", got.Attrs["actions"])
+	}
+}
+
 func TestSecurityCRUD(t *testing.T) {
 	c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method + " " + r.URL.Path {
