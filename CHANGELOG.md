@@ -22,6 +22,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   every `nexspence_role` that referenced it. `actions` defaults to `read` when
   the configuration omits it.
 
+### Security
+
+- Go toolchain requirement raised to 1.26.10, and `golang.org/x/net`,
+  `golang.org/x/text`, `golang.org/x/crypto` and `google.golang.org/grpc`
+  updated to versions without known reachable vulnerabilities (`govulncheck`
+  reports no findings).
+
 ## 0.4.0
 
 ### Added
