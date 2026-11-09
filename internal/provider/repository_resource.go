@@ -65,21 +65,23 @@ type repoAptModel struct {
 }
 
 type repositoryModel struct {
-	ID               types.String    `tfsdk:"id"`
-	Name             types.String    `tfsdk:"name"`
-	Format           types.String    `tfsdk:"format"`
-	Type             types.String    `tfsdk:"type"`
-	BlobStore        types.String    `tfsdk:"blob_store"`
-	Online           types.Bool      `tfsdk:"online"`
-	AllowAnonymous   types.Bool      `tfsdk:"allow_anonymous"`
-	Description      types.String    `tfsdk:"description"`
-	QuotaBytes       types.Int64     `tfsdk:"quota_bytes"`
-	CleanupPolicyIDs []types.String  `tfsdk:"cleanup_policy_ids"`
-	RoutingRuleID    types.String    `tfsdk:"routing_rule_id"`
-	Proxy            *repoProxyModel `tfsdk:"proxy"`
-	Group            *repoGroupModel `tfsdk:"group"`
-	Apt              *repoAptModel   `tfsdk:"apt"`
-	URL              types.String    `tfsdk:"url"`
+	ID                  types.String    `tfsdk:"id"`
+	Name                types.String    `tfsdk:"name"`
+	Format              types.String    `tfsdk:"format"`
+	Type                types.String    `tfsdk:"type"`
+	BlobStore           types.String    `tfsdk:"blob_store"`
+	Online              types.Bool      `tfsdk:"online"`
+	AllowAnonymous      types.Bool      `tfsdk:"allow_anonymous"`
+	Description         types.String    `tfsdk:"description"`
+	QuotaBytes          types.Int64     `tfsdk:"quota_bytes"`
+	CleanupPolicyIDs    []types.String  `tfsdk:"cleanup_policy_ids"`
+	RoutingRuleID       types.String    `tfsdk:"routing_rule_id"`
+	Proxy               *repoProxyModel `tfsdk:"proxy"`
+	Group               *repoGroupModel `tfsdk:"group"`
+	Apt                 *repoAptModel   `tfsdk:"apt"`
+	WritePolicy         types.String    `tfsdk:"write_policy"`
+	AllowRedeployLatest types.Bool      `tfsdk:"allow_redeploy_latest"`
+	URL                 types.String    `tfsdk:"url"`
 }
 
 func (r *repositoryResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -128,6 +130,24 @@ func (r *repositoryResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"routing_rule_id": schema.StringAttribute{
 				Optional:    true,
 				Description: "ID of a routing rule (nexspence_routing_rule.id) attached to this repository. Empty/omitted detaches it.",
+			},
+			"write_policy": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("allow"),
+				Validators: []validator.String{stringvalidator.OneOf(
+					"allow", "allow_once", "deny",
+				)},
+				Description: "Hosted deployment policy (formatConfig.write_policy): " +
+					"allow (Allow redeploy, the default), allow_once (Disable redeploy), or deny (Read-only). " +
+					"allow_once and deny are valid on hosted repositories only; absent/allow is a no-op on proxy and group.",
+			},
+			"allow_redeploy_latest": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(false),
+				Description: "When write_policy = allow_once on a hosted docker or oci repository, allow the " +
+					"latest tag to be re-pushed. The API rejects true on any other format or type.",
 			},
 			"url": schema.StringAttribute{Computed: true},
 		},
@@ -241,6 +261,22 @@ func (r *repositoryResource) ValidateConfig(ctx context.Context, req resource.Va
 		resp.Diagnostics.AddAttributeError(path.Root("apt"), "Unexpected apt block",
 			`apt block is only valid when format = "apt"`)
 	}
+	if typ != "hosted" && !data.WritePolicy.IsUnknown() && !data.WritePolicy.IsNull() {
+		if p := data.WritePolicy.ValueString(); p == "allow_once" || p == "deny" {
+			resp.Diagnostics.AddAttributeError(path.Root("write_policy"), "write_policy is hosted-only",
+				`write_policy = "`+p+`" applies to hosted repositories only`)
+		}
+	}
+	if !data.AllowRedeployLatest.IsUnknown() && !data.AllowRedeployLatest.IsNull() && data.AllowRedeployLatest.ValueBool() {
+		format := data.Format.ValueString()
+		if data.Format.IsUnknown() || data.Format.IsNull() {
+			return
+		}
+		if typ != "hosted" || (format != "docker" && format != "oci") {
+			resp.Diagnostics.AddAttributeError(path.Root("allow_redeploy_latest"), "allow_redeploy_latest is docker/oci hosted-only",
+				`allow_redeploy_latest = true applies to hosted docker and oci repositories only`)
+		}
+	}
 }
 
 func (r *repositoryResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -258,7 +294,9 @@ func (r *repositoryResource) Configure(_ context.Context, req resource.Configure
 // toAPI resolves blob_store name -> ID and assembles the API payload.
 // detachRouting sends an empty routingRuleId so an omitted attribute clears
 // the attachment on update. Create leaves the pointer nil when unset.
-func (r *repositoryResource) toAPI(ctx context.Context, m *repositoryModel, detachRouting bool) (*client.Repository, error) {
+// prev is the prior Terraform state on update (nil on create); it tells
+// applyWritePolicy when allow_once/deny must be cleared back to allow.
+func (r *repositoryResource) toAPI(ctx context.Context, m, prev *repositoryModel, detachRouting bool) (*client.Repository, error) {
 	bs, err := r.client.GetBlobStore(ctx, m.BlobStore.ValueString())
 	if err != nil {
 		return nil, fmt.Errorf("resolve blob store %q: %w", m.BlobStore.ValueString(), err)
@@ -302,6 +340,7 @@ func (r *repositoryResource) toAPI(ctx context.Context, m *repositoryModel, deta
 		setCfgSecret(fc, "signing_key", m.Apt.SigningKey)
 		setCfgSecret(fc, "signing_key_passphrase", m.Apt.SigningKeyPassphrase)
 	}
+	applyWritePolicy(fc, m, prev)
 	if len(fc) > 0 {
 		repo.FormatConfig = fc
 	}
@@ -397,6 +436,7 @@ func (r *repositoryResource) fromAPI(ctx context.Context, m *repositoryModel, re
 	} else if repo.Format != "apt" {
 		m.Apt = nil
 	}
+	readWritePolicy(repo.Type, repo.FormatConfig, m)
 	return nil
 }
 
@@ -406,7 +446,7 @@ func (r *repositoryResource) Create(ctx context.Context, req resource.CreateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	payload, err := r.toAPI(ctx, &plan, false)
+	payload, err := r.toAPI(ctx, &plan, nil, false)
 	if err != nil {
 		resp.Diagnostics.AddError("Create repository failed", err.Error())
 		return
@@ -450,15 +490,24 @@ func (r *repositoryResource) Read(ctx context.Context, req resource.ReadRequest,
 }
 
 func (r *repositoryResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan repositoryModel
+	var plan, state repositoryModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	payload, err := r.toAPI(ctx, &plan, true)
+	payload, err := r.toAPI(ctx, &plan, &state, true)
 	if err != nil {
 		resp.Diagnostics.AddError("Update repository failed", err.Error())
 		return
+	}
+	if payload.FormatConfig != nil {
+		current, err := r.client.GetRepository(ctx, plan.Name.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Update repository failed", err.Error())
+			return
+		}
+		payload.FormatConfig = overlayFormatConfig(current.FormatConfig, payload.FormatConfig)
 	}
 	if _, err := r.client.UpdateRepository(ctx, payload); err != nil {
 		resp.Diagnostics.AddError("Update repository failed", err.Error())
@@ -498,6 +547,94 @@ func cfgString(cfg map[string]any, key string) string {
 	}
 	s, _ := cfg[key].(string)
 	return s
+}
+
+func cfgBool(cfg map[string]any, key string) bool {
+	if cfg == nil {
+		return false
+	}
+	v, _ := cfg[key].(bool)
+	return v
+}
+
+func writePolicyValue(m *repositoryModel) string {
+	if m == nil || m.WritePolicy.IsNull() || m.WritePolicy.IsUnknown() || m.WritePolicy.ValueString() == "" {
+		return "allow"
+	}
+	return m.WritePolicy.ValueString()
+}
+
+func allowRedeployLatestValue(m *repositoryModel) bool {
+	if m == nil || m.AllowRedeployLatest.IsNull() || m.AllowRedeployLatest.IsUnknown() {
+		return false
+	}
+	switch m.Format.ValueString() {
+	case "docker", "oci":
+		return m.AllowRedeployLatest.ValueBool()
+	default:
+		return false
+	}
+}
+
+// applyWritePolicy writes formatConfig.write_policy / allow_redeploy_latest.
+// The server Update replaces formatConfig wholesale, so a default hosted repo
+// must not send the map (that would drop apt keys and any other entries).
+// allow_once/deny and allow_redeploy_latest are sent when set; a change back
+// to the default is sent so the previous value is actually cleared.
+func applyWritePolicy(fc map[string]any, m, prev *repositoryModel) {
+	if m.Type.ValueString() != "hosted" {
+		return
+	}
+	policy := writePolicyValue(m)
+	latest := allowRedeployLatestValue(m)
+	nonDefault := policy != "allow" || latest
+	changing := prev != nil && (writePolicyValue(prev) != policy || allowRedeployLatestValue(prev) != latest)
+	if !nonDefault && !changing && len(fc) == 0 {
+		return
+	}
+	fc["write_policy"] = policy
+	if latest {
+		fc["allow_redeploy_latest"] = true
+	}
+}
+
+func readWritePolicy(repoType string, cfg map[string]any, m *repositoryModel) {
+	if repoType != "hosted" {
+		m.WritePolicy = types.StringValue("allow")
+		m.AllowRedeployLatest = types.BoolValue(false)
+		return
+	}
+	policy := cfgString(cfg, "write_policy")
+	switch policy {
+	case "allow_once", "deny":
+	default:
+		policy = "allow"
+	}
+	m.WritePolicy = types.StringValue(policy)
+	m.AllowRedeployLatest = types.BoolValue(cfgBool(cfg, "allow_redeploy_latest"))
+}
+
+// overlayFormatConfig keeps formatConfig keys Terraform does not model
+// (the server replaces the whole map). updates win; an omitted
+// allow_redeploy_latest clears a stored true.
+func overlayFormatConfig(stored, updates map[string]any) map[string]any {
+	if updates == nil {
+		return nil
+	}
+	if stored == nil {
+		return updates
+	}
+	out := make(map[string]any, len(stored)+len(updates))
+	for k, v := range stored {
+		out[k] = v
+	}
+	for k, v := range updates {
+		out[k] = v
+	}
+	if _, set := updates["allow_redeploy_latest"]; !set {
+		delete(out, "allow_redeploy_latest")
+	}
+	return out
 }
 
 // cfgInt64 reads a whole-number config entry. JSON numbers arrive as float64;

@@ -1,9 +1,19 @@
 # Hosted repository — stores artifacts locally.
 resource "nexspence_repository" "maven_releases" {
-  name       = "maven-releases"
-  format     = "maven2"
-  type       = "hosted"
-  blob_store = "default"
+  name         = "maven-releases"
+  format       = "maven2"
+  type         = "hosted"
+  blob_store   = "default"
+  write_policy = "allow_once"
+}
+
+# Docker hosted: write-once tags, but "latest" may be re-pushed.
+resource "nexspence_repository" "docker_hosted" {
+  name                  = "docker-hosted"
+  format                = "docker"
+  type                  = "hosted"
+  write_policy          = "allow_once"
+  allow_redeploy_latest = true
 }
 
 # Proxy repository — caches artifacts from a remote.

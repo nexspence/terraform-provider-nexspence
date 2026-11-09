@@ -3,6 +3,15 @@
 All notable changes to the Nexspence Terraform provider are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.5.0
+
+### Added
+
+- `write_policy` on `nexspence_repository` (`allow` / `allow_once` / `deny`) —
+  hosted deployment policy.
+- `allow_redeploy_latest` — under `allow_once`, hosted docker/oci may re-push
+  the `latest` tag.
+
 ## 0.4.0
 
 ### Added

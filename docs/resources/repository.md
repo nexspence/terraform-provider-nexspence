@@ -15,10 +15,20 @@ A Nexspence repository (hosted, proxy, or group) of any supported format.
 ```terraform
 # Hosted repository — stores artifacts locally.
 resource "nexspence_repository" "maven_releases" {
-  name       = "maven-releases"
-  format     = "maven2"
-  type       = "hosted"
-  blob_store = "default"
+  name         = "maven-releases"
+  format       = "maven2"
+  type         = "hosted"
+  blob_store   = "default"
+  write_policy = "allow_once"
+}
+
+# Docker hosted: write-once tags, but "latest" may be re-pushed.
+resource "nexspence_repository" "docker_hosted" {
+  name                  = "docker-hosted"
+  format                = "docker"
+  type                  = "hosted"
+  write_policy          = "allow_once"
+  allow_redeploy_latest = true
 }
 
 # Proxy repository — caches artifacts from a remote.
@@ -77,6 +87,7 @@ resource "nexspence_repository" "maven_all" {
 ### Optional
 
 - `allow_anonymous` (Boolean)
+- `allow_redeploy_latest` (Boolean) When write_policy = allow_once on a hosted docker or oci repository, allow the latest tag to be re-pushed. The API rejects true on any other format or type.
 - `apt` (Block, Optional) APT hosted signing (format = apt). (see [below for nested schema](#nestedblock--apt))
 - `blob_store` (String) Blob store name (resolved to its ID against the API).
 - `cleanup_policy_ids` (List of String)
@@ -86,6 +97,7 @@ resource "nexspence_repository" "maven_all" {
 - `proxy` (Block, Optional) Proxy settings (type = proxy). (see [below for nested schema](#nestedblock--proxy))
 - `quota_bytes` (Number)
 - `routing_rule_id` (String) ID of a routing rule (nexspence_routing_rule.id) attached to this repository. Empty/omitted detaches it.
+- `write_policy` (String) Hosted deployment policy (formatConfig.write_policy): allow (Allow redeploy, the default), allow_once (Disable redeploy), or deny (Read-only). allow_once and deny are valid on hosted repositories only; absent/allow is a no-op on proxy and group.
 
 ### Read-Only
 
