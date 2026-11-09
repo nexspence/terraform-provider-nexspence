@@ -17,13 +17,19 @@ type ContentSelector struct {
 }
 
 // Privilege mirrors the privilege JSON. Type is always repository-content-selector.
+//
+// Attrs carries the type-specific payload. For repository-content-selector
+// privileges the server requires attrs.actions (a non-empty list of action
+// names) and rejects the request with 400 otherwise, so it must always be
+// sent — an absent or empty list means "every action" to the RBAC engine.
 type Privilege struct {
-	ID                string `json:"id,omitempty"`
-	Name              string `json:"name"`
-	Description       string `json:"description,omitempty"`
-	Type              string `json:"type"`
-	ContentSelectorID string `json:"contentSelectorId,omitempty"`
-	ReadOnly          bool   `json:"readOnly,omitempty"`
+	ID                string         `json:"id,omitempty"`
+	Name              string         `json:"name"`
+	Description       string         `json:"description,omitempty"`
+	Type              string         `json:"type"`
+	Attrs             map[string]any `json:"attrs,omitempty"`
+	ContentSelectorID string         `json:"contentSelectorId,omitempty"`
+	ReadOnly          bool           `json:"readOnly,omitempty"`
 }
 
 // Role mirrors the role JSON. Privileges holds privilege IDs (read and write).
