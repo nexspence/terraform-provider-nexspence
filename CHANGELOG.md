@@ -3,6 +3,16 @@
 All notable changes to the Nexspence Terraform provider are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.5.1
+
+### Security
+
+- Go toolchain requirement raised to 1.26.11, fixing GO-2026-6859
+  (CVE-2026-97054) in the Go standard library. The provider is an HTTP client,
+  so the affected code path (an HTTP/1 *server* setting `Connection: close`
+  from `MaxBytesReader`) is not reachable, but the shipped binaries no longer
+  carry the flagged standard library.
+
 ## 0.5.0
 
 ### Added
